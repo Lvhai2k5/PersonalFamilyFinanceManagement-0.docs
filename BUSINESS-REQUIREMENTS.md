@@ -1,149 +1,169 @@
-# FamJar — Đặc tả nghiệp vụ (Business Requirements)
+# FinanceManagement — Đặc tả nghiệp vụ (Business Requirements)
 
-> Tổng hợp từ `Document/FinalClassDiagram.drawio` (nguồn chính — mới nhất), đối chiếu với `Document/FinanceManagement.png` (bản trước) và `Document/FamJar-Architecture.html` (kiến trúc kỹ thuật đã có). `Document/ClassDiagram.eapx` (Enterprise Architect, dạng binary) chưa đọc được — mở bằng EA nếu cần đối chiếu thêm.
+> Nguồn: `Document/FinanceManagement.png` (class diagram hiện hành, đã qua nhiều vòng chỉnh sửa cùng người dùng — bản đọc gần nhất). `Document/ClassDiagram.eapx` là file dự án Enterprise Architect (binary, chỉ mở được bằng EA) mô tả cùng thiết kế, không đối chiếu được bằng công cụ text. Các file từng dùng làm nguồn ở bản rất đầu (`FinalClassDiagram.drawio`, `FamJar-Architecture.html`) **không còn tồn tại trong repo** — không dùng lại nội dung của chúng.
 >
-> ⚠️ Tài liệu này **chưa hoàn toàn chốt** — mục 7 liệt kê các mâu thuẫn thật giữa các nguồn, cần bạn xác nhận trước khi bắt đầu code entity ở [Backend/SKILLS-BACKEND.md](Backend/SKILLS-BACKEND.md).
+> Tài liệu này là bản **chốt sau nhiều vòng trao đổi nghiệp vụ trực tiếp** với người dùng (không chỉ suy ra từ hình vẽ) — mỗi quy tắc dưới đây đều đã được xác nhận rõ. Mục 7 chỉ còn 2 lưu ý triển khai (không phải lỗi thiết kế) — toàn bộ điểm lệch giữa diagram và nghiệp vụ đã chốt từ các vòng review trước đó **đã được sửa hết** trên diagram mới nhất.
 
 ---
 
 ## 1. Giới thiệu
 
-**FamJar** — ứng dụng quản lý tài chính gia đình. Gia đình tạo **FamilySpace** (không gian chung), trong đó chia tiền vào nhiều **MoneyJar** (hũ chi tiêu) có ngưỡng cảnh báo. Thành viên ghi nhận giao dịch (**TransactionHistory**) qua nhiều hình thức nhập liệu (Manual/OCR/Voice), giao dịch cần duyệt trước khi tính vào số dư. Hệ thống tách 2 cụm độc lập: **Admin** (giám sát, xử lý phản hồi) và **Mobile/User** (nghiệp vụ tài chính hằng ngày), dùng chung 1 database.
+**FinanceManagement** — ứng dụng quản lý tài chính gia đình (package gốc `ute.fit.financemanagement`, xem [README.md](README.md)). Một `User` tạo `FamilySpace`, quản lý thành viên qua `FamilyMember` (đúng 1 `Owner` duy nhất tại mọi thời điểm, còn lại là `Member`). Tiền được chia vào nhiều `ExpenseJar`; mỗi hũ có thể được Owner tự cấu hình (không bắt buộc) 3 ngưỡng số: `warningThreshold` (chỉ cảnh báo), `emergencyThreshold` (cảnh báo **và tự khóa hũ**), `approveThreshold` (từ mức này giao dịch phải chờ Owner duyệt, dưới mức tự động hợp lệ). Giao dịch (`TransactionHistory`) được nhập qua nhiều kênh (`Record`: Manual/OCR/Voice/Message/Announcement/ScanAI), luôn biết rõ **thành viên nào tạo ra** và **thành viên nào đã đổi trạng thái** nó. `Admin` giám sát tài khoản (`Account`) và xử lý `Feedback`. Mọi hành động quan trọng đều được ghi `Log`, biết rõ cả **"cái gì bị đổi"** (`Loggable`: Account/FamilySpace/TransactionHistory/Feedback) lẫn **"ai gây ra"** (`Person`).
 
 ## 2. Đối tượng người dùng (Actor)
 
 | Actor | Vai trò | Ghi chú |
 |---|---|---|
-| **Admin** | Giám sát hệ thống, khóa/mở tài khoản, xử lý Feedback, tra cứu Log | Kế thừa `Person`, có `Account` riêng |
-| **User — Owner** | Chủ FamilySpace, toàn quyền: thêm/xóa thành viên, tạo MoneyJar, duyệt giao dịch | `FamilyMembership.role = Owner` |
-| **User — CoOwner** | Đồng sở hữu, quyền gần như Owner | `FamilyMembership.role = CoOwner` |
-| **User — Member** | Thành viên thường, tạo giao dịch nhưng không tự duyệt | `FamilyMembership.role = Member` |
+| **Admin** | Giám sát tài khoản (`Account`), xử lý `Feedback`, quản lý `Log` | Kế thừa `Person`; có `Account` riêng của chính mình (qua `Person`–`Account`), **đồng thời** giám sát được nhiều `Account` khác (`Admin`–`supervises`–`Account`) |
+| **User — Owner** | Chủ `FamilySpace`: quản lý thành viên, tạo `ExpenseJar`, cấu hình ngưỡng, duyệt/khóa/mở hũ | `FamilyMember.role = Owner`; **đúng 1 Owner/FamilySpace tại mọi thời điểm**, full quyền bất kể `permissions` |
+| **User — Member** | Thành viên thường, tạo giao dịch | `FamilyMember.role = Member`; quyền chi tiết theo `permissions: List<Permission>` (Read/Write) |
 
-> ⚠️ Class diagram chưa mô tả rõ **CoOwner khác Owner ở quyền cụ thể nào** — hiện chỉ có 3 giá trị enum `Role`, không có bảng phân quyền chi tiết theo action. Xem mục 6 và 7.
+Không có cấp bậc trung gian (không có CoOwner). Owner **không được tự rời nhóm** khi đang là Owner duy nhất — phải `changeRole()` chuyển 1 Member khác thành Owner mới trước, sau đó mới được rời/lùi xuống Member (không cần method `transferOwnership()` riêng — `changeRole()` sẵn có đã đủ, theo xác nhận của người dùng).
 
 ## 3. Phạm vi chức năng theo nhóm nghiệp vụ
 
 ### 3.1 Auth & Account
-- Đăng ký/đăng nhập cho `User` và `Admin`, đổi mật khẩu.
-- Mỗi `Account` (username/password) gắn với đúng 1 `Person` (Admin hoặc User) — xem mâu thuẫn ở mục 7.1.
+- Đăng ký/đăng nhập cho `User` và `Admin`; `Account.changePassword()`.
+- `Account` có 1 quan hệ 1–1 duy nhất **"has"** với `Person` (lớp cha của `Admin`/`User`) — 1 Account gắn đúng 1 Person, không tách 2 association riêng cho User/Admin.
+- **`Admin "1" —— "0..*" Account`, nhãn "supervises"**: Admin giám sát/khóa được nhiều Account (của User khác), **tách biệt** với quan hệ `Person`–`Account` (đó là tài khoản của chính Admin để tự đăng nhập). 2 quan hệ không thay thế nhau.
+- `Account.lockAccount()` / `unlockAccount()` — method thực thi việc Admin khóa/mở tài khoản vi phạm, đi kèm `changePassword()` sẵn có.
+- `Account` hiện thực `Loggable` → mọi hành động trên Account (login/logout, đổi mật khẩu, bị khóa/mở...) đều sinh `Log`, áp dụng cho cả Admin lẫn User.
 
 ### 3.2 FamilySpace & Thành viên
-- `User` tạo `FamilySpace` (1 User có thể tạo nhiều FamilySpace).
-- `FamilySpace.addMember()` / `removeMember()` — thêm/xóa thành viên.
-- Quan hệ thành viên lưu qua `FamilyMembership` (role + trạng thái), không lưu trực tiếp trên `User`/`FamilySpace` — cho phép 1 User tham gia nhiều FamilySpace với vai trò khác nhau ở mỗi nơi.
+- `User.createFamilySpace()` — 1 User tạo được nhiều `FamilySpace`, tự động thành `Owner` của space đó.
+- Quan hệ thành viên qua `FamilyMember` (association class, không lưu trực tiếp trên `User`/`FamilySpace`): `User "1" — participates in — "0..*" FamilyMember`; `FamilyMember "1..*" — belongs to — "1" FamilySpace`.
+- `FamilyMember.changeMemberStatus()` / `changePermission()` / `changeRole()` quản lý `memberStatus` (Active/Inactive), `permissions` (Read/Write) và `role` (Owner/Member).
+- **Owner luôn full quyền**, bỏ qua `permissions` — thuộc tính này chỉ có tác dụng hạn chế với Member.
+- `FamilySpace` hiện thực `Loggable` → tạo/xóa thành viên, đổi thông tin FamilySpace đều được ghi Log.
 
-### 3.3 MoneyJar & Threshold (ngưỡng cảnh báo)
-- `FamilySpace.createMoneyJar()` — 1 FamilySpace có nhiều MoneyJar.
-- Mỗi MoneyJar có `checkBalance()` và được gắn với ngưỡng cảnh báo (Threshold) — có 2 nhóm ngưỡng: **Static** (cố định) và **Dynamic** (theo %), mỗi nhóm có 2 loại con. Chi tiết cấu trúc + mâu thuẫn xem mục 4.4 và 7.2.
+### 3.3 ExpenseJar & Threshold (3 ngưỡng độc lập)
+- `FamilySpace.createExpenseJar()` — 1 FamilySpace có 0..* `ExpenseJar`.
+- `baseExpense: BigDecimal` — **chi phí gốc (ngân sách ban đầu) của hũ**, do Owner thiết lập khi tạo hũ; không phải số dư hiện tại. Số dư hiện tại của hũ = `baseExpense` trừ tổng các `TransactionHistory.expense` đã ở trạng thái `Approve` — đây là giá trị `checkBalance()` dùng để so sánh với `warningThreshold`/`emergencyThreshold`.
+- 3 ngưỡng dạng số (`BigDecimal`), **đều do Owner tự cấu hình, không bắt buộc**:
+  - `warningThreshold` — cảnh báo nhẹ, **không khóa hũ**.
+  - `emergencyThreshold` — số dư **≥ ngưỡng này** → cảnh báo **và tự động khóa hũ** (`lockJar()`), chỉ Owner mới `unlockJar()` được.
+  - `approveThreshold` — giao dịch có `expense` **≥ ngưỡng này** mới cần Owner duyệt; **dưới ngưỡng thì tự động hợp lệ**, không cần ai duyệt.
+- `jarStatus: JarStatus` (enum `JarStatus`: Active/Locked, 1 giá trị đơn) — biểu diễn **trạng thái thao tác hiện tại của chính cái hũ** (Active = cho Read+Write bình thường, Locked = chỉ Read, chặn tạo giao dịch mới), đi theo `lockJar()`/`unlockJar()`. **Đây không phải phân quyền theo từng thành viên** — khác hoàn toàn với `FamilyMember.permissions` (quyền của 1 thành viên trong gia đình). 2 khái niệm dễ nhầm vì trước đó từng đặt tên là `jarPermission` dùng chung enum `Permission` — đã đổi sang enum `JarStatus` riêng, giá trị đơn (không phải List), cho rõ nghĩa.
+- `checkBalance()` — kiểm tra số dư so với `warningThreshold`/`emergencyThreshold`, tự kích hoạt cảnh báo + khóa khi tới ngưỡng khẩn cấp.
+- `approveTransaction()` / `rejectTransaction()` — đặt ở `ExpenseJar` (không phải `TransactionHistory`): Owner duyệt/từ chối giao dịch của chính hũ đó, hoàn toàn chủ quan, hệ thống chỉ **đề xuất** cần duyệt khi vượt `approveThreshold`.
+- `syncOfflineTransactions()` — đồng bộ các giao dịch được tạo lúc mất mạng (xem 3.4).
 
-### 3.4 Giao dịch & Ghi nhận (TransactionHistory / RecordInput)
-- `User.create()` → tạo `TransactionHistory` gắn với 1 MoneyJar, trạng thái khởi tạo `Pending`.
-- Giao dịch được nhập qua 1 trong các hình thức `RecordInput`: Manual / OCR / Voice.
-- `approveTransaction()` / `rejectTransaction()` — chuyển trạng thái `Pending` → `Approve`/`Reject`. Duyệt thành công → cập nhật số dư MoneyJar → kiểm tra ngưỡng → cảnh báo nếu vượt (theo luồng đã mô tả trong `FamJar-Architecture.html` §08).
+### 3.4 Giao dịch & Ghi nhận (TransactionHistory / Record)
+- 1 `ExpenseJar` có 0..* `TransactionHistory`. Mỗi `TransactionHistory` có đúng 1 `Record`.
+- **`Record.baseRecord: String`** là **dữ liệu thô** — link ảnh hóa đơn (OCR), link file mp3 (Voice), nội dung tin nhắn thô (Message)... lưu ở nơi khác (storage/CDN). `processBaseRecord()` xử lý dữ liệu thô này thành **nội dung đầy đủ**, đổ vào `TransactionHistory.content`.
+- 6 lớp con của `Record`, cùng override `processBaseRecord()` theo cách riêng:
+  - **Manual** — nhập tay. **OCR** — quét ảnh hóa đơn. **Voice** — ghi âm. **ScanAI** — quét bằng AI.
+  - **Message** — giao dịch tạo từ 1 tin nhắn **User chủ động share vào app** từ ứng dụng khác (Zalo, SMS...), ví dụ "mẹ ơi con mua 100k cái áo rồi nha mẹ".
+  - **Announcement** — app **chủ động đọc notification** phát sinh trên máy, nhưng **chỉ từ 1 vài app được User cấu hình trước (whitelist)**, không quét tràn lan mọi thông báo.
+- **`FamilyMember "1" — create — "0..*" TransactionHistory`**: biết rõ **thành viên nào tạo** giao dịch.
+- **`FamilyMember "1" — changes status — "0..*" TransactionHistory`**: biết rõ **thành viên nào (Owner) đã đổi trạng thái** giao dịch — tách riêng khỏi người tạo, phục vụ audit chính xác.
+- **Luồng trạng thái `TransactionStatus`, rẽ theo `expense` so với `ExpenseJar.approveThreshold`:**
+  - `expense < approveThreshold` (hoặc hũ không cấu hình ngưỡng) → **tự động Approve**, bỏ qua Pend/Review.
+  - `expense ≥ approveThreshold` → đi đủ `Draft` (nháp, chưa nộp) → `Pend` (đã nộp, chưa xem) → `Review` (đã xem, chờ xử lý) → `Approve`/`Reject` (Owner quyết định qua `ExpenseJar`).
+  - **`Offline`** — trạng thái tạm khi thiết bị mất mạng (lưu ở database cục bộ, không xác định Draft/Pend/Review lúc đó). Khi có mạng lại, `ExpenseJar.syncOfflineTransactions()` áp lại đúng quy tắc trên: dưới ngưỡng → thẳng `Approve`; từ ngưỡng trở lên → về `Pend` chờ duyệt bình thường.
+- `TransactionHistory.changeStatus()` — method chung thực hiện các chuyển trạng thái trên; nút quyết định cuối (Approve/Reject khi vượt ngưỡng) vẫn nằm ở `ExpenseJar`.
+- `TransactionHistory` hiện thực `Loggable` → mọi thay đổi giao dịch được ghi Log.
 
-### 3.5 Nhật ký (Log)
-- Mọi hành động ghi (Create/Modify/Delete/Login/Logout) của `User` và mọi thay đổi trên `MoneyJar` đều tạo 1 `Log`.
-- `Admin.check(Log)` — Admin **tra cứu** Log, không tự tạo Log cho hành động của chính mình trong bản Final (khác bản PNG — xem mục 7.4).
+#### 3.4.1 Luồng nghiệp vụ chi tiết theo từng hình thức nhập liệu (`Record`)
+
+Nguyên tắc chung cho cả 6 luồng: `processBaseRecord()` chỉ có nhiệm vụ chuẩn hóa dữ liệu thô (`baseRecord`) thành nội dung giao dịch có cấu trúc — **không luồng nào được tự ý đổi `transactionStatus`**. Kết quả xử lý luôn được đổ vào **cùng 1 màn hình xác nhận giao dịch** (nơi thành viên xem lại, chỉnh sửa nếu cần) trước khi giao dịch được ghi nhận chính thức; giao dịch chỉ thật sự được tạo (và bắt đầu đi theo luồng trạng thái ở mục 3.4) tại thời điểm thành viên xác nhận.
+
+- **Manual**: Thành viên mở màn hình tạo giao dịch → tự nhập đầy đủ thông tin (số tiền, hũ chi tiêu, mô tả, ngày phát sinh) → xác nhận tạo → hệ thống kiểm tra tính hợp lệ của thông tin đã nhập → giao dịch được ghi nhận và đi theo luồng trạng thái đã quy định.
+
+- **OCR**: Thành viên cung cấp 1 ảnh hóa đơn → hệ thống đọc nội dung chữ trong ảnh → suy ra các thông tin giao dịch (số tiền, ngày, nơi phát sinh) từ nội dung đã đọc được → các thông tin này được điền sẵn vào màn hình xác nhận giao dịch → thành viên xem lại, chỉnh sửa nếu thông tin suy ra chưa đúng → xác nhận tạo → giao dịch được ghi nhận. Nếu hệ thống không đọc được nội dung ảnh hoặc không suy ra được thông tin giao dịch hợp lệ, màn hình xác nhận được mở ở trạng thái trống để thành viên tự nhập.
+
+- **Voice**: Thành viên cung cấp 1 đoạn ghi âm → hệ thống chuyển giọng nói thành văn bản → suy ra các thông tin giao dịch (số tiền, danh mục, ghi chú) từ văn bản đã chuyển đổi → điền sẵn vào màn hình xác nhận giao dịch → thành viên xem lại, chỉnh sửa nếu cần → xác nhận tạo → giao dịch được ghi nhận. Nếu không nhận diện được giọng nói hoặc không suy ra được thông tin hợp lệ, xử lý tương tự OCR (mở màn hình xác nhận trống).
+
+- **Message**: Thành viên chủ động chuyển tiếp 1 đoạn tin nhắn (đang trò chuyện ở nơi khác) vào hệ thống → hệ thống phân tích nội dung đoạn tin nhắn đó → suy ra các thông tin giao dịch (số tiền, danh mục gợi ý) → điền sẵn vào màn hình xác nhận giao dịch → thành viên xem lại, chỉnh sửa nếu cần → xác nhận tạo → giao dịch được ghi nhận. Nếu nội dung tin nhắn không chứa thông tin giao dịch hợp lệ, hệ thống không tạo giao dịch nháp mà thông báo cho thành viên biết để tự nhập tay.
+
+- **Announcement**: Thành viên cấu hình trước danh sách các nguồn thông báo được phép sử dụng để ghi nhận giao dịch (chỉ những nguồn được chọn mới được xử lý, không xử lý toàn bộ thông báo phát sinh trên thiết bị). Khi có 1 thông báo mới phát sinh từ 1 nguồn đã được cho phép, hệ thống tự động đọc nội dung thông báo đó → phân tích để suy ra các thông tin giao dịch → tạo sẵn 1 giao dịch ở trạng thái nháp kèm thông tin đã suy ra, đồng thời báo cho thành viên biết có giao dịch mới cần xem → thành viên mở lại, xem/chỉnh sửa thông tin → xác nhận → giao dịch được ghi nhận chính thức. Nếu nội dung thông báo không suy ra được thông tin giao dịch hợp lệ hoặc đến từ nguồn không có trong danh sách cho phép, hệ thống bỏ qua, không tạo giao dịch.
+
+- **ScanAI**: Thành viên cung cấp 1 ảnh chụp trực tiếp của 1 vật dụng thật (không phải hóa đơn/giấy tờ) → hệ thống nhận diện loại vật dụng trong ảnh → suy ra tên và danh mục chi tiêu tương ứng với vật dụng đã nhận diện → điền sẵn tên và danh mục vào màn hình xác nhận giao dịch, **riêng số tiền luôn để trống** → thành viên tự nhập số tiền, xem lại/chỉnh sửa tên và danh mục nếu cần → xác nhận tạo → giao dịch được ghi nhận. Nếu hệ thống không nhận diện được vật dụng, các trường tên/danh mục cũng được để trống hoàn toàn cho thành viên tự nhập, không hiển thị kết quả nhận diện chưa xác định.
+
+### 3.5 Nhật ký (Log) — tách rõ "cái gì" và "ai"
+- **`Loggable "1" — save actions — "1..*" Log`**: trả lời **"cái gì bị đổi"** — `Loggable` là interface được `Account`, `FamilySpace`, `TransactionHistory`, `Feedback` cùng hiện thực.
+- **`Person "1" — performs — "0..*" Log`**: trả lời **"ai gây ra hành động"** — dùng `Person` (không tách riêng User/Admin) vì actor có thể là 1 trong 2, tận dụng lại quan hệ kế thừa sẵn có.
+- **`Admin "1" — manages — "0..*" Log`**: Admin có quyền quản lý/tra cứu toàn bộ Log — quan hệ này **khác** với "performs" (performs = ai gây ra hành động cụ thể đó; manages = Admin có quyền xem/quản lý mọi log, kể cả log không phải do chính Admin đó gây ra). Không trùng lặp.
+- `Log` gồm `actionType: ActionType` (Login/Logout/Register/Create/Modify/Delete), `logTime`, `ipAddress`, `description`.
+- **Không thêm giá trị `ActionType` riêng cho Approve/Reject/Lock/Unlock** — dùng chung `actionType = Modify`, nhưng **bắt buộc điền `description`** rõ ràng để phân biệt (ví dụ `"Approve transaction #123"`, `"Lock jar #45 do chạm emergencyThreshold"`, `"Unlock jar #45"`, `"Admin lock account #7"`).
 
 ### 3.6 Phản hồi (Feedback)
-- `User` tạo `Feedback` (nội dung + trạng thái + kết quả xử lý).
-- `handleWithFeedback()` — xử lý phản hồi, cập nhật `StatusFeedback` + `result`.
-- ⚠️ Ai gọi `handleWithFeedback()` (chắc chắn là Admin theo ngữ cảnh nghiệp vụ + theo `FamJar-Architecture.html`) **không có quan hệ tường minh Admin↔Feedback** trong bản Final — xem mục 7.5.
+- `User "1" — create — "0..*" Feedback`.
+- `Admin "1" — response — "0..*" Feedback`.
+- `Feedback.handleWithFeedBack()` — cập nhật `feedbackStatus: FeedbackStatus` (`Draft/Pend/Review/Approve/Reject`) + `result`.
+- `Feedback` hiện thực `Loggable` → xử lý feedback cũng được ghi Log (với actor là Admin qua `Person — performs — Log`).
 
-## 4. Thực thể nghiệp vụ (Entity Catalog — theo `FinalClassDiagram.drawio`)
+## 4. Thực thể nghiệp vụ (Entity Catalog — theo `Document/FinanceManagement.png`)
 
 ### 4.1 Person (abstract)
-`name`, `phone`, `birthDate`, `address`, `gmail`. 2 lớp con: **Admin** (không thêm thuộc tính), **User** (+ `identificationNumber`).
+`address`, `birthDate`, `gmail`, `name`, `phone`. 2 lớp con: **Admin** (không thêm thuộc tính), **User** (+ `identificationNumber: int`, + `createFamilySpace(): void`).
 
 ### 4.2 Account
-`username`, `password`. Quan hệ 1-1 riêng với `User` và 1-1 riêng với `Admin` (2 association tách biệt trong bản Final, không phải 1 association chung tại `Person`).
+`accountStatus: Status`, `createdTime: Date`, `password: String`, `username: String` — `changePassword(): void`, `lockAccount(): void`, `unlockAccount(): void`. Quan hệ: `Person "1"——"1" Account` (has, định danh/đăng nhập); `Admin "1"——"0..*" Account` (supervises, giám sát). Hiện thực `Loggable`.
 
-### 4.3 FamilySpace / FamilyMembership
-- **FamilySpace**: `name` — có `addMember()`, `removeMember()`, `createMoneyJar()`.
-- **FamilyMembership**: `role: Role` (`Owner`/`CoOwner`/`Member`), `permission: Permission` (giá trị enum thực tế: `Active`/`Inactive` — xem 7.3). 1 User có 0..* FamilyMembership.
+### 4.3 FamilySpace / FamilyMember
+- **FamilySpace**: `name` — `createExpenseJar(): void`. Hiện thực `Loggable`.
+- **FamilyMember**: `memberStatus: Status`, `permissions: List<Permission>`, `role: Role` — `changeMemberStatus()`, `changePermission()`, `changeRole()`. Quan hệ: `User "1"——"0..*" FamilyMember` (participates in); `FamilyMember "1..*"——"1" FamilySpace` (belongs to); `FamilyMember "1"——"0..*" TransactionHistory` (create); `FamilyMember "1"——"0..*" TransactionHistory` (changes status). Ràng buộc: đúng 1 `role=Owner`/FamilySpace tại mọi thời điểm; Owner full quyền, bỏ qua `permissions`.
 
-### 4.4 MoneyJar & Threshold
-- **MoneyJar**: `name`, `baseMoney`, `description` — có `checkBalance()`. 1 FamilySpace có 0..* MoneyJar; 1 MoneyJar có 0..* TransactionHistory.
-- **StaticThreshold** (abstract): `baseThreshold` — `alertOverThreshold()`.
-  - **FixedThreshold** (kế thừa StaticThreshold, không thêm thuộc tính)
-  - **FlexibleThreshold** (kế thừa StaticThreshold) — `changeThreshold()`
-- **DynamicThreshold** (abstract): `percentageThreshold` — `alertOverThreshold()`.
-  - **WarningThreshold** (kế thừa DynamicThreshold) — `pushNotification()`
-  - **EmergencyThreshold** (kế thừa DynamicThreshold) — `closeJar()`, `openJar()`
-- Có ghi chú tay "**bỏ fixed**" gần `FlexibleThreshold`/`FixedThreshold` trong diagram gốc — ý định chưa rõ, xem 7.2.
+### 4.4 ExpenseJar
+`approveThreshold: BigDecimal`, `baseExpense: BigDecimal` (chi phí gốc/ngân sách ban đầu của hũ, không phải số dư hiện tại), `description: String`, `emergencyThreshold: BigDecimal`, `jarStatus: JarStatus`, `name: String`, `warningThreshold: BigDecimal` — `approveTransaction(): void`, `checkBalance(): void`, `lockJar(): void`, `rejectTransaction(): void`, `syncOfflineTransactions(): void`, `unlockJar(): void`. 3 ngưỡng đều do Owner tự cấu hình, không bắt buộc. Quan hệ: `FamilySpace "1"——"0..*" ExpenseJar` (has); `ExpenseJar "1"——"0..*" TransactionHistory` (has).
 
-### 4.5 TransactionHistory & RecordInput
-- **TransactionHistory**: `transactionID`, `content`, `expense`, `statusTransaction: StatusTransaction` (`Pending`/`Approve`/`Reject`) — `approveTransaction()`, `rejectTransaction()`. 1 TransactionHistory có đúng 1 RecordInput.
-- **RecordInput** (abstract): `baseRecord` — `processRecord()`. 3 lớp con: **Manual** (không thêm thuộc tính), **OCR** (+ `baseOCRInput`), **Voice** (+ `baseVoiceInput`).
+### 4.5 TransactionHistory & Record
+- **TransactionHistory**: `content: String`, `expense: BigDecimal`, `transactionStatus: TransactionStatus` — `changeStatus(): void`. 1 TransactionHistory có đúng 1 `Record`. Hiện thực `Loggable`. Quan hệ với `FamilyMember`: xem 4.3.
+- **Record** (abstract): `baseRecord: String` (dữ liệu thô) — `processBaseRecord(): void` (xử lý thành nội dung đầy đủ). 6 lớp con, không thêm thuộc tính: **Manual**, **OCR**, **Voice**, **Message** (User chủ động share), **Announcement** (app tự đọc theo whitelist), **ScanAI**.
 
 ### 4.6 Log
-`actionType: ActionType`, `logTime`, `ipAddress`, `description` — `checkLog(user)`. Quan hệ: Admin **check** 1..* Log; User **save account actions** vào 1..* Log; MoneyJar **save jar actions** vào 1..* Log.
+`actionType: ActionType`, `description`, `ipAddress`, `logTime: Date`. Quan hệ: `Loggable "1"——"1..*" Log` (save actions — target); `Person "1"——"0..*" Log` (performs — actor); `Admin "1"——"0..*" Log` (manages — quyền tra cứu/quản lý).
 
 ### 4.7 Feedback
-`content`, `statusFeedback: StatusFeedback`, `result` — `handleWithFeedback()`. User **create** 0..* Feedback.
+`content: String`, `feedbackStatus: FeedbackStatus`, `result: String` — `handleWithFeedBack(): void`. Hiện thực `Loggable`. Quan hệ: `User "1"——"0..*" Feedback` (create); `Admin "1"——"0..*" Feedback` (response).
 
 ## 5. Enum / trạng thái
 
 | Enum | Giá trị | Dùng ở |
 |---|---|---|
-| `Role` | Owner, CoOwner, Member | `FamilyMembership.role` |
-| `Permission` | Active, Inactive | `FamilyMembership.permission` — ⚠️ tên/giá trị không khớp, xem 7.3 |
-| `StatusTransaction` | Pending, Approve, Reject | `TransactionHistory.statusTransaction` |
-| `StatusFeedback` | Draft, Pending, Review, Approve, Reject | `Feedback.statusFeedback` |
-| `ActionType` | Login, Logout, Create, Modify, Delete | `Log.actionType` |
+| `Status` | Active, Inactive | `Account.accountStatus`, `FamilyMember.memberStatus` |
+| `Role` | Owner, Member | `FamilyMember.role` — không có CoOwner |
+| `Permission` | Read, Write | `FamilyMember.permissions` — quyền **của thành viên** |
+| `JarStatus` | Active, Locked | `ExpenseJar.jarStatus` — trạng thái thao tác **của chính hũ** (đi theo lock/unlock), không phải quyền thành viên |
+| `TransactionStatus` | Draft, Pend, Review, Approve, Reject, Offline | `TransactionHistory.transactionStatus` |
+| `FeedbackStatus` | Draft, Pend, Review, Approve, Reject | `Feedback.feedbackStatus` |
+| `ActionType` | Login, Logout, Register, Create, Modify, Delete | `Log.actionType` |
 
-## 6. Ma trận quyền theo vai trò (suy luận từ ngữ cảnh — CHƯA có trong class diagram)
+`TransactionStatus`: rẽ nhánh theo `approveThreshold` (xem 3.4) — dưới ngưỡng tự Approve, từ ngưỡng trở lên đi đủ Draft→Pend→Review→Approve/Reject; `Offline` là trạng thái tạm ngoài luồng, thoát ra bằng `syncOfflineTransactions()` áp lại đúng quy tắc ngưỡng. `FeedbackStatus` dùng chung khuôn Draft→Pend→Review→Approve/Reject, không có Offline.
 
-| Hành động | Owner | CoOwner | Member |
+## 6. Ma trận quyền theo vai trò
+
+| Hành động | Owner | Member (permission Write) | Member (chỉ Read) |
 |---|:---:|:---:|:---:|
-| Tạo FamilySpace | ✅ (người tạo) | — | — |
-| Thêm/xóa thành viên | ✅ | ✅ (giả định) | ❌ |
-| Tạo MoneyJar / cấu hình Threshold | ✅ | ✅ (giả định) | ❌ |
-| Tạo giao dịch (TransactionHistory) | ✅ | ✅ | ✅ |
-| Duyệt/từ chối giao dịch | ✅ | ✅ (giả định) | ❌ |
+| Tạo FamilySpace | ✅ (tự động thành Owner) | — | — |
+| Thêm/xóa thành viên | ✅ | ❌ | ❌ |
+| Chuyển giao quyền Owner (`changeRole()`) | ✅ (bắt buộc trước khi rời nhóm) | ❌ | ❌ |
+| Tạo ExpenseJar, cấu hình 3 ngưỡng | ✅ | ❌ | ❌ |
+| Tạo giao dịch (TransactionHistory) | ✅ (full quyền) | ✅ | ❌ |
+| Giao dịch dưới `approveThreshold` | Tự động Approve | Tự động Approve | ❌ (không tạo được) |
+| Duyệt/từ chối giao dịch từ `approveThreshold` trở lên | ✅ (chỉ Owner) | ❌ | ❌ |
+| Khóa/mở hũ (`lockJar()`/`unlockJar()`) | ✅ (chỉ Owner mở; khóa có thể tự động qua `checkBalance()`) | ❌ | ❌ |
+| Khóa/mở tài khoản User khác (`Account.lockAccount()`/`unlockAccount()`) | Admin (không phải Owner) | — | — |
 | Gửi Feedback | ✅ | ✅ | ✅ |
 
-> Bảng này là **suy luận nghiệp vụ hợp lý**, không phải trích xuất từ diagram — class diagram không có bảng phân quyền theo role×action. Cần bạn xác nhận trước khi implement `@PreAuthorize`/guard ở Service layer.
+## 7. Lưu ý triển khai (không phải lỗi thiết kế)
 
-## 7. Vấn đề mở — cần xác nhận trước khi code
+1. **Tiền dùng `BigDecimal`, scale cố định 3 chữ số thập phân** (`baseExpense`, `expense`, 3 ngưỡng) — đã đúng kiểu trên diagram. Khi code: chuẩn hóa qua `setScale(3, RoundingMode.HALF_UP)` ngay khi nhận input, so sánh bằng `compareTo()` (không dùng `==`/`equals()`), cộng/trừ dùng `add()`/`subtract()` của `BigDecimal` xuyên suốt — không ép về `double` giữa chừng. Cột DB tương ứng: `DECIMAL(15,3)`.
+2. **Các ràng buộc nghiệp vụ đã chốt bằng lời nhưng không thể hiện được trên class diagram** (đúng 1 `role=Owner`/FamilySpace tại mọi thời điểm, whitelist app cho `Announcement`, quy tắc rẽ nhánh `approveThreshold`, `baseExpense` là ngân sách gốc chứ không phải số dư hiện tại...) — đây là giới hạn tự nhiên của UML class diagram (không phải state machine/OCL), **bắt buộc phải validate/tính toán ở tầng Service khi code**, không thể trông chờ diagram tự enforce.
 
-### 7.1 Account gắn với Person hay gắn riêng User/Admin?
-Bản PNG: `Account` — 1:1 — `Person` (1 association chung ở lớp cha, User/Admin kế thừa). Bản Final (drawio): `Account` có 2 association tách biệt, 1 với `User`, 1 với `Admin`. Nếu implement theo Final, `Account` cần biết nó thuộc loại nào (discriminator hoặc 2 bảng riêng); nếu implement theo PNG, chỉ cần 1 khóa ngoại `person_id`. → **Ảnh hưởng trực tiếp đến schema DB**, cần chốt trước.
+Không còn phát hiện mâu thuẫn nghiệp vụ hay lỗi mô hình nào khác. Toàn bộ vấn đề lớn từng nêu qua các vòng review trước — CoOwner, Threshold ngược tên, Permission lẫn Status, Log thiếu actor, Feedback thiếu Admin, TransactionHistory thiếu người tạo/người duyệt, `jarPermission` mơ hồ, Account thiếu method khóa/mở, `jarStatus` khai báo sai kiểu (List thay vì giá trị đơn), tiền dùng `double` — **đều đã được sửa đúng** trên diagram mới nhất.
 
-### 7.2 Phân cấp Threshold: Static/Dynamic ngược trực giác tên gọi + ghi chú "bỏ fixed"
-Trong bản Final, `WarningThreshold` và `EmergencyThreshold` kế thừa **DynamicThreshold** (có `percentageThreshold`), còn `FixedThreshold` và `FlexibleThreshold` kế thừa **StaticThreshold** (có `baseThreshold`) — ngược lại với cách đặt tên trực quan (chữ "Flexible" nghe giống "Dynamic" hơn). Ngoài ra `FamJar-Architecture.html` §04 lại mô tả **1 entity `Threshold` duy nhất** với field `kind: "Fixed|Emergency|Warning|Flexible"` (không dùng kế thừa 6 lớp). Và có ghi chú tay "**bỏ fixed**" trong file gốc chưa rõ ý định (bỏ hẳn class `FixedThreshold`? hay gộp Fixed vào Emergency/Warning?).
-→ **Cần chốt 1 trong 3 phương án**: (a) giữ đúng 6 lớp kế thừa như Final, (b) dùng 1 entity + enum `kind` như HTML đã đơn giản hóa, (c) bỏ Fixed theo ghi chú tay.
+## 8. Chấm điểm tổng thể (bản class diagram hiện tại)
 
-Ngoài ra, cardinality giữa `MoneyJar` và 2 lớp Threshold **ngược chiều nhau trong chính bản Final**: MoneyJar↔StaticThreshold ghi `0..*`:`1`, còn MoneyJar↔DynamicThreshold ghi `1`:`0..*` — 2 quan hệ có cấu trúc giống nhau nhưng multiplicity đối nghịch, nhiều khả năng là lỗi đặt nhãn khi vẽ tay chứ không phải chủ ý. Cần xác nhận: 1 MoneyJar có bao nhiêu Threshold (1 cái duy nhất, hay có thể nhiều loại cùng lúc)?
-
-### 7.3 Enum `Permission` mang giá trị Active/Inactive — đây là Status, không phải Permission
-Xác nhận từ chính bản Final: enum tên `Permission` nhưng 2 giá trị là `Active`/`Inactive` — đúng là **trạng thái thành viên** (active/bị khóa), không phải quyền hạn (đọc/ghi) như tên gọi "Permission" gợi ý. Bản PNG có 2 enum tách biệt: `Status` (Active/Inactive, gắn ở `Account`) và `Permission` (Read/Write, gắn ở `FamilyMember`) — đúng bản chất hơn.
-→ **Khuyến nghị**: đổi tên enum trong Final thành `MembershipStatus` (Active/Inactive) và cân nhắc có cần thêm enum `Permission` thật (Read/Write) hay không, hay quyền hạn đã được suy ra hoàn toàn từ `Role`.
-
-### 7.4 Log: Admin có tự tạo Log cho hành động của mình không?
-Bản Final: chỉ có `User` và `MoneyJar` "save actions" vào Log; `Admin` chỉ "**check**" (đọc) Log — nghĩa là hành động của Admin (login, khóa account...) **không được ghi log**. Bản PNG gộp chung `Person` (cả Admin lẫn User) đều "save actions" vào Log.
-→ Cần xác nhận: có cố ý loại Admin khỏi audit log không? Nếu không, đây là thiếu sót cần bổ sung (đặc biệt vì Admin có quyền khóa Account/xử lý Feedback — hành động nhạy cảm nên có audit).
-
-### 7.5 Feedback: thiếu quan hệ tường minh với Admin (ai xử lý?)
-Bản Final chỉ có `User` → create → `Feedback`; không có association nào từ `Admin` tới `Feedback`. Bản PNG có `Feedback` — response — `Admin` (0..*:1). Nghiệp vụ (và cả `FamJar-Architecture.html` §05, endpoint `PATCH /feedback/{id}`) đều giả định Admin là người gọi `handleWithFeedback()`.
-→ Đề xuất: bổ sung lại association `Admin` 1 — `Feedback` 0..* vào bản Final (khả năng cao đây là thiếu sót khi vẽ, không phải chủ ý bỏ).
-
-Ngoài ra có 1 edge nối `Feedback` → `Log` (nhãn "relate", 1:1) trong file gốc chưa rõ ý nghĩa — có thể là mỗi Feedback khi xử lý cũng sinh 1 Log tương ứng, cần xác nhận.
-
-### 7.6 Đặt tên không nhất quán giữa các file nguồn
-| Khái niệm | Final (drawio) | PNG (cũ) | HTML (kiến trúc) |
-|---|---|---|---|
-| "Hũ chi tiêu" | `MoneyJar` | `ExpenseJar` | `MoneyJar` |
-| Field số dư gốc | `baseMoney` | `baseExpense` | (không nêu) |
-| "Ghi nhận nhập liệu" (abstract) | `RecordInput` / `processRecord()` | `Record` / `processBaseRecord()` | (không nêu) |
-| Số loại nhập liệu | 3 (Manual/OCR/Voice) | 6 (+ Message/Announcement/ScanAI) | 3 (Manual/OCR/Voice) |
-| Tên sản phẩm | (không có) | (không có) | **FamJar** |
-
-→ **Final + HTML đã thống nhất tên `MoneyJar`** và 3 loại RecordInput — nên coi đây là chốt cuối, PNG là bản nháp cũ hơn. Riêng tên sản phẩm "**FamJar**" (từ HTML) khác với tên thư mục/package hiện tại `ute.fit.financemanagement` — cần xác nhận tên chính thức dùng cho báo cáo đồ án.
-
-### 7.7 CoOwner khác Owner ở quyền cụ thể nào?
-Enum `Role` có 3 giá trị nhưng không có tài liệu nào (cả 2 diagram lẫn HTML) mô tả rõ ranh giới quyền giữa Owner và CoOwner — bảng ở mục 6 là suy luận tạm, cần bạn xác nhận trước khi code phân quyền.
+| Tiêu chí | Điểm /10 | Lý do |
+|---|:---:|---|
+| Tính đầy đủ nghiệp vụ | **9.5** | Mọi luồng chính (threshold, approve, lock/unlock jar, khóa/mở account, offline sync, audit actor, ai tạo/ai duyệt giao dịch) đều đầy đủ |
+| Chuẩn OOP | **9** | `FamilyMember` là association class mẫu mực; `Loggable` tách target/actor rõ ràng; `jarStatus` đúng kiểu giá trị đơn; tiền dùng đúng `BigDecimal` |
+| Nhất quán / convention | **9** | Đã sửa hết lỗi đặt tên/cú pháp/kiểu dữ liệu phát hiện qua nhiều vòng (`jarPermission`→`jarStatus`, hết lỗi `()()`, hết List sai chỗ, `double`→`BigDecimal`) |
+| Mức độ giải quyết vấn đề đã đặt ra qua các lần review | **10** | Toàn bộ gap từng nêu qua các vòng đều đã được xử lý đúng và có chủ đích |
+| **Tổng thể** | **9.5/10** | Thiết kế đã hoàn thiện, đủ điều kiện dùng làm nguồn chốt để bắt đầu code entity. Phần còn lại để tiến gần 10/10 nằm ngoài class diagram: bổ sung State Machine Diagram cho `TransactionStatus`, Sequence Diagram cho luồng duyệt theo ngưỡng và luồng đồng bộ Offline, và note constraint tường minh cho các ràng buộc ở mục 7.2 |
 
 ---
 
-*Dựa trên `Document/FinalClassDiagram.drawio`, `Document/FinanceManagement.png`, `Document/FamJar-Architecture.html`. Cập nhật: 2026-09-03.*
+*Dựa trên `Document/FinanceManagement.png` (đọc lần cập nhật gần nhất). `Document/ClassDiagram.eapx` (Enterprise Architect, binary) mô tả cùng thiết kế nhưng không đối chiếu được bằng công cụ text. Cập nhật: 2026-09-06 — chốt bản cuối: `Account` đã có `lockAccount()`/`unlockAccount()`, `jarStatus` đã đúng kiểu giá trị đơn (`JarStatus`), toàn bộ tiền đã đổi từ `double` sang `BigDecimal` (scale 3), `baseExpense` được làm rõ là ngân sách gốc của hũ (không phải số dư hiện tại). Toàn bộ các vấn đề nêu qua các vòng review đã được giải quyết — tài liệu này là bản chốt để bắt đầu code entity.*
