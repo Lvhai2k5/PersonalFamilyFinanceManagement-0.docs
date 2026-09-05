@@ -1,8 +1,8 @@
 # Cấu trúc Frontend Mobile chuẩn (Flutter)
 
 > File này đi cùng bộ 3 tài liệu kiến trúc dự án:
-> - [`SKILLS-BACKEND.md`](./SKILLS-BACKEND.md) — Backend Java Spring Boot
-> - [`../Frontend-Web/SKILLS-FRONTEND-WEB.md`](../Frontend-Web/SKILLS-FRONTEND-WEB.md) — Frontend Web React
+> - [`../Backend/SKILLS-BACKEND.md`](../Backend/SKILLS-BACKEND.md) — Backend Java Spring Boot
+> - [`../Frontend-Web/SKILLS-FRONTEND-WEB.md`](../Frontend-Web/SKILLS-FRONTEND-WEB.md) — Frontend Web React + TypeScript
 > - `SKILLS-FRONTEND-MOBILE.md` (file này) — Frontend Mobile Flutter
 >
 > Cả 3 cùng theo **1 nguyên tắc kiến trúc thống nhất**: mỗi lớp một trách nhiệm, luồng phụ thuộc một chiều, cùng "nói chung ngôn ngữ" qua DTO khi giao tiếp API.
@@ -284,9 +284,10 @@ public class TransactionCreateRequest {
 }
 ```
 
-```javascript
-// Web React: payload gửi lên phải khớp field trên
-const payload = { amount: 500000, category: "FOOD", note: "Ăn trưa" };
+```typescript
+// Web React (TypeScript): payload gửi lên phải khớp field trên
+const payload: { amount: number; category: string; note?: string } =
+  { amount: 500000, category: "FOOD", note: "Ăn trưa" };
 transactionApi.create(payload);
 ```
 

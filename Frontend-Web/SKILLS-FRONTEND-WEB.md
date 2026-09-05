@@ -1,51 +1,57 @@
-# Cấu trúc Frontend chuẩn (React)
+# Cấu trúc Frontend chuẩn (React + TypeScript)
+
+> Công nghệ chính thức: **React + TypeScript** (xem [`../TECH-STACK.md`](../TECH-STACK.md)) — mọi file `.jsx`/`.js` bên dưới là quy ước **cũ, đã thay bằng `.tsx`/`.ts`**. Toàn bộ props, state, dữ liệu API phải khai báo `type`/`interface` rõ ràng, hạn chế tối đa `any`.
 
 ## 1. Cấu trúc thư mục (package structure) chuẩn
 
 ```
 src/
 ├── api/                      # Gọi API tới backend
-│   ├── axiosClient.js         # Cấu hình axios instance (baseURL, interceptor)
-│   ├── userApi.js             # Các hàm gọi API theo module
-│   └── transactionApi.js
+│   ├── axiosClient.ts          # Cấu hình axios instance (baseURL, interceptor)
+│   ├── userApi.ts              # Các hàm gọi API theo module
+│   └── transactionApi.ts
 ├── assets/                   # Ảnh, icon, font, media tĩnh
 ├── components/                # Component dùng chung toàn app
 │   ├── common/                 # Button, Input, Modal, Table... (không gắn nghiệp vụ)
 │   └── layout/                  # Header, Sidebar, Footer, MainLayout
 ├── pages/                     # Từng trang/nghiệp vụ (feature-based)
 │   ├── Login/
-│   │   ├── Login.jsx
+│   │   ├── Login.tsx
 │   │   ├── Login.module.css
-│   │   └── useLogin.js          # hook riêng cho trang này
+│   │   └── useLogin.ts          # hook riêng cho trang này
 │   ├── Dashboard/
 │   └── Transaction/
-│       ├── TransactionList.jsx
-│       ├── TransactionForm.jsx
-│       └── useTransaction.js
+│       ├── TransactionList.tsx
+│       ├── TransactionForm.tsx
+│       └── useTransaction.ts
 ├── hooks/                     # Custom hook dùng chung nhiều nơi
-│   └── useAuth.js
+│   └── useAuth.ts
 ├── context/  (hoặc store/)     # Quản lý state toàn cục
-│   └── AuthContext.jsx          # (hoặc Redux/Zustand store nếu app lớn)
+│   └── AuthContext.tsx          # (hoặc Redux/Zustand store nếu app lớn)
 ├── routes/                    # Định nghĩa route
-│   ├── AppRoutes.jsx
-│   └── PrivateRoute.jsx         # Chặn route cần đăng nhập
+│   ├── AppRoutes.tsx
+│   └── PrivateRoute.tsx         # Chặn route cần đăng nhập
+├── types/                      # Type/interface dùng chung (tương đương DTO phía backend)
+│   └── transaction.ts
 ├── utils/                      # Hàm tiện ích thuần (không gọi API)
-│   ├── formatCurrency.js
-│   └── formatDate.js
+│   ├── formatCurrency.ts
+│   └── formatDate.ts
 ├── constants/                  # Hằng số (message, key, enum)
 ├── styles/                     # CSS/SCSS toàn cục, biến theme
-├── App.jsx
-└── main.jsx                    # Điểm khởi chạy (Vite)
+├── App.tsx
+└── main.tsx                    # Điểm khởi chạy (Vite)
 ```
 
 > Quy tắc luồng phụ thuộc: **Page → Hook → Api → HTTP**. Lớp trên gọi xuống lớp dưới, không có chiều ngược lại (`api/` không được import từ `hooks/` hay `components/`).
+>
+> **`types/` mới thêm khi chuyển sang TypeScript**: định nghĩa `interface`/`type` cho dữ liệu trao đổi qua API (tương đương DTO backend) — dùng chung giữa `api/`, `hooks/`, `pages/`, tránh mỗi nơi tự khai báo type riêng rồi lệch nhau.
 
 ---
 
 ## 2. Ý nghĩa chính xác từng lớp
 
 ### `api/` — Data Access Layer (phía client)
-Là nơi **duy nhất** được phép gọi HTTP request tới backend. Chỉ lo việc gửi/nhận dữ liệu thô (raw JSON), không biết dữ liệu đó sẽ hiển thị ra sao. Chứa `axiosClient` (cấu hình chung: baseURL, interceptor gắn token) và các file theo module (`userApi.js`, `transactionApi.js`) — mỗi file export các hàm gọi endpoint tương ứng.
+Là nơi **duy nhất** được phép gọi HTTP request tới backend. Chỉ lo việc gửi/nhận dữ liệu thô (raw JSON), không biết dữ liệu đó sẽ hiển thị ra sao. Chứa `axiosClient` (cấu hình chung: baseURL, interceptor gắn token) và các file theo module (`userApi.ts`, `transactionApi.ts`) — mỗi file export các hàm gọi endpoint tương ứng.
 
 ### `components/common/` — Presentational/Dumb Components
 Component UI **thuần túy, tái sử dụng**, không biết gì về nghiệp vụ hay dữ liệu tới từ đâu. Chỉ nhận dữ liệu qua `props` và render, kèm callback (`onClick`, `onChange`...) báo lại cho cha khi có tương tác. Ví dụ: `Button`, `Input`, `Modal`, `Table`.
@@ -91,11 +97,11 @@ CSS/SCSS dùng chung toàn app: biến màu, font, reset CSS. Style riêng từn
 
 ## 4. Ví dụ end-to-end
 
-```javascript
-// api/axiosClient.js
-import axios from 'axios';
+```typescript
+// api/axiosClient.ts
+import axios, { type AxiosInstance } from 'axios';
 
-const axiosClient = axios.create({
+const axiosClient: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL, // .env: VITE_API_BASE_URL=http://localhost:8080/api
 });
 
@@ -108,25 +114,40 @@ axiosClient.interceptors.request.use((config) => {
 export default axiosClient;
 ```
 
-```javascript
-// api/transactionApi.js
+```typescript
+// types/transaction.ts — type dùng chung, tương đương DTO phía backend
+export interface Transaction {
+  id: number;
+  content: string;
+  expense: number;
+  transactionStatus: string;
+  createdAt: string;
+}
+
+export type TransactionCreatePayload = Omit<Transaction, 'id' | 'transactionStatus' | 'createdAt'>;
+```
+
+```typescript
+// api/transactionApi.ts
 import axiosClient from './axiosClient';
+import type { Transaction, TransactionCreatePayload } from '../types/transaction';
 
 const transactionApi = {
-  getAll: () => axiosClient.get('/transactions'),
-  create: (data) => axiosClient.post('/transactions', data),
+  getAll: () => axiosClient.get<Transaction[]>('/transactions'),
+  create: (data: TransactionCreatePayload) => axiosClient.post<Transaction>('/transactions', data),
 };
 
 export default transactionApi;
 ```
 
-```javascript
-// pages/Transaction/useTransaction.js
+```typescript
+// pages/Transaction/useTransaction.ts
 import { useState, useEffect } from 'react';
 import transactionApi from '../../api/transactionApi';
+import type { Transaction } from '../../types/transaction';
 
 export function useTransaction() {
-  const [transactions, setTransactions] = useState([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -139,8 +160,8 @@ export function useTransaction() {
 }
 ```
 
-```jsx
-// pages/Transaction/TransactionList.jsx
+```tsx
+// pages/Transaction/TransactionList.tsx
 import { useTransaction } from './useTransaction';
 import Table from '../../components/common/Table';
 
@@ -152,14 +173,18 @@ export default function TransactionList() {
 }
 ```
 
+> Ví dụ trên dùng đúng entity thật `TransactionHistory` (field `content`, `expense`, `transactionStatus` — xem [`../BUSINESS-REQUIREMENTS.md`](../BUSINESS-REQUIREMENTS.md) mục 4.5), khác với ví dụ minh họa `amount/category/note` ở mục 6 (mục đó chỉ minh họa nguyên tắc khớp DTO, không phải entity thật).
+
 ---
 
 ## 5. Quy tắc giữ "sạch"
 
 - **Dumb vs Smart component**: `components/common` chỉ nhận props và render (không gọi API); `pages/` mới "thông minh" — gọi hook, xử lý logic.
-- **Alias import**: cấu hình `@/` trỏ về `src/` (trong `vite.config.js`) để tránh `../../../../` dài dòng.
+- **Alias import**: cấu hình `@/` trỏ về `src/` (trong `vite.config.ts` **và** `tsconfig.json` — 2 nơi phải khớp nhau, thiếu 1 trong 2 sẽ báo lỗi resolve module) để tránh `../../../../` dài dòng.
 - **1 file = 1 trách nhiệm**: không nhét cả gọi API lẫn JSX lẫn xử lý logic vào chung 1 component lớn.
 - **`.env` cho cấu hình môi trường**: `VITE_API_BASE_URL` khác nhau giữa dev/prod, không hardcode URL backend trong code.
+- **`tsconfig.json` bật `strict: true`**: bắt lỗi kiểu dữ liệu ngay lúc code thay vì để runtime mới phát hiện — đúng tinh thần "không tin dữ liệu" đã áp dụng cho validate, nay áp dụng luôn cho type.
+- **Không dùng `any` để né lỗi type**: nếu chưa rõ shape dữ liệu, khai báo `interface`/`type` tạm ở `types/` rồi tinh chỉnh sau, thay vì gõ `any` cho nhanh — mất hết lợi ích của TypeScript nếu lạm dụng.
 
 ---
 
@@ -195,9 +220,15 @@ api/                   (gọi HTTP)     ←──→  Repository         (gọi 
 
 > Đây là **ví dụ minh họa cho nguyên tắc khớp field DTO giữa 2 phía**, field đặt tên đơn giản (`amount`, `category`, `note`) để dễ đọc — **không phải entity thật của dự án**. Entity/field thật (`TransactionHistory`, `Record` và 6 lớp con Manual/OCR/Voice/Message/Announcement/ScanAI, `TransactionStatus`...) xem [`BUSINESS-REQUIREMENTS.md`](../BUSINESS-REQUIREMENTS.md) mục 3.4 & 4.5.
 
-```javascript
-// frontend: payload gửi đi
-const payload = {
+```typescript
+// frontend: payload gửi đi (type khai báo tương ứng ở types/, minh họa ngắn gọn ngay tại đây)
+interface DemoTransactionPayload {
+  amount: number;
+  category: string;
+  note?: string;
+}
+
+const payload: DemoTransactionPayload = {
   amount: 500000,
   category: "FOOD",
   note: "Ăn trưa",
@@ -225,7 +256,7 @@ public class TransactionResponseDTO {
 }
 ```
 
-```javascript
+```typescript
 // frontend nhận đúng theo Response DTO
 const res = await transactionApi.create(payload);
 // res.data có shape: { id, amount, category, note, createdAt }

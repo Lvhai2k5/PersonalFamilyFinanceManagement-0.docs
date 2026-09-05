@@ -1,9 +1,9 @@
 # Nguyên tắc thiết kế: Clean Architecture, SOLID, OOP
 
 > File này quy định **cách viết code bên trong từng lớp**, bổ sung cho 3 file cấu trúc đã có:
-> - [`SKILLS-BACKEND.md`](./SKILLS-BACKEND.md) — cấu trúc Backend (nơi file gì đặt ở đâu)
-> - [`Frontend-Web/SKILLS-FRONTEND-WEB.md`](./Frontend-Web/SKILLS-FRONTEND-WEB.md) — cấu trúc Web React
-> - [`SKILLS-FRONTEND-MOBILE.md`](./SKILLS-FRONTEND-MOBILE.md) — cấu trúc Mobile Flutter
+> - [`Backend/SKILLS-BACKEND.md`](./Backend/SKILLS-BACKEND.md) — cấu trúc Backend (nơi file gì đặt ở đâu)
+> - [`Frontend-Web/SKILLS-FRONTEND-WEB.md`](./Frontend-Web/SKILLS-FRONTEND-WEB.md) — cấu trúc Web React + TypeScript
+> - [`Frontend-Mobile/SKILLS-FRONTEND-MOBILE.md`](./Frontend-Mobile/SKILLS-FRONTEND-MOBILE.md) — cấu trúc Mobile Flutter
 >
 > 3 file trên trả lời **"đặt code ở đâu"**. File này trả lời **"viết code trong đó như thế nào cho đúng"**.
 
