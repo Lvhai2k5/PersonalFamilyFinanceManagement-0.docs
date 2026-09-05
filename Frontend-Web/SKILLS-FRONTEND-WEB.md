@@ -193,6 +193,8 @@ api/                   (gọi HTTP)     ←──→  Repository         (gọi 
 
 ### Ví dụ khớp DTO giữa 2 phía — chức năng "Tạo giao dịch"
 
+> Đây là **ví dụ minh họa cho nguyên tắc khớp field DTO giữa 2 phía**, field đặt tên đơn giản (`amount`, `category`, `note`) để dễ đọc — **không phải entity thật của dự án**. Entity/field thật (`TransactionHistory`, `Record` và 6 lớp con Manual/OCR/Voice/Message/Announcement/ScanAI, `TransactionStatus`...) xem [`BUSINESS-REQUIREMENTS.md`](../BUSINESS-REQUIREMENTS.md) mục 3.4 & 4.5.
+
 ```javascript
 // frontend: payload gửi đi
 const payload = {
@@ -206,7 +208,7 @@ transactionApi.create(payload);
 ```java
 // backend: dto/request/TransactionCreateRequest.java — PHẢI khớp field với payload trên
 public class TransactionCreateRequest {
-    @NotNull Double amount;
+    @NotNull BigDecimal amount;
     @NotNull String category;
     String note;
 }
@@ -216,7 +218,7 @@ public class TransactionCreateRequest {
 // backend: dto/response/TransactionResponseDTO.java
 public class TransactionResponseDTO {
     Long id;
-    Double amount;
+    BigDecimal amount;
     String category;
     String note;
     LocalDateTime createdAt;

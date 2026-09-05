@@ -2,7 +2,7 @@
 
 > File này đi cùng bộ 3 tài liệu kiến trúc dự án:
 > - [`SKILLS-BACKEND.md`](./SKILLS-BACKEND.md) — Backend Java Spring Boot
-> - [`SKILLS-FRONTEND.md`](./SKILLS-FRONTEND.md) — Frontend Web React
+> - [`../Frontend-Web/SKILLS-FRONTEND-WEB.md`](../Frontend-Web/SKILLS-FRONTEND-WEB.md) — Frontend Web React
 > - `SKILLS-FRONTEND-MOBILE.md` (file này) — Frontend Mobile Flutter
 >
 > Cả 3 cùng theo **1 nguyên tắc kiến trúc thống nhất**: mỗi lớp một trách nhiệm, luồng phụ thuộc một chiều, cùng "nói chung ngôn ngữ" qua DTO khi giao tiếp API.
@@ -273,10 +273,12 @@ Config             ←──→  .env           ←──→  config/env.dart
 
 ### Ví dụ 1 DTO dùng chung cho cả 3 phía — "Tạo giao dịch"
 
+> Đây là **ví dụ minh họa cho nguyên tắc khớp field DTO giữa 3 phía**, field đặt tên đơn giản (`amount`, `category`, `note`) để dễ đọc — **không phải entity thật của dự án**. Entity/field thật (`TransactionHistory`, `Record` và 6 lớp con Manual/OCR/Voice/Message/Announcement/ScanAI, `TransactionStatus`...) xem [`BUSINESS-REQUIREMENTS.md`](../BUSINESS-REQUIREMENTS.md) mục 3.4 & 4.5.
+
 ```java
 // Backend: dto/request/TransactionCreateRequest.java
 public class TransactionCreateRequest {
-    @NotNull Double amount;
+    @NotNull BigDecimal amount;
     @NotNull String category;
     String note;
 }
